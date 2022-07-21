@@ -1,0 +1,35 @@
+attachments: []
+description: Tape A1
+groups: []
+id: dd9e9c35-b3a6-4043-b17f-da38566cf395
+meta: {}
+name: A1
+recordings:
+- audio_files: []
+  audio_sources:
+  - format: wav
+    id: 48b05fd5-4057-4f41-8544-7b9e2937b2cf
+    meta: {}
+    name: 211009_0001.wav
+    path: A1/211009_0001.wav
+    type: audio
+  description: Tape A1 side 1 channel stereo
+  id: 46326827-c986-496a-97b5-bcb0018e7f2c
+  meta:
+    comment: ''
+  name: A1_side_1_channel_stereo
+  source_channel_mode: stereo
+- audio_files: []
+  audio_sources:
+  - format: wav
+    id: 7a3e6c37-9495-4edf-82c6-d68329fa102b
+    meta: {}
+    name: 211009_0002.wav
+    path: A1/211009_0002.wav
+    type: audio
+  description: Tape A1 side 2 channel stereo
+  id: 78966dde-ef3c-4953-8df9-52b19a9333f4
+  meta:
+    comment: ''
+  name: A1_side_2_channel_stereo
+  source_channel_mode: stereo

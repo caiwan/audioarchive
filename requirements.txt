@@ -1,0 +1,8 @@
+# These has to be sorted out as it gets integrated
+
+librosa
+soundfile 
+
+# ipython stuff
+ipywidgets
+matplotlib

@@ -1,0 +1,1 @@
+# ffmpeg -i videotocut.mp4 -c copy -map 0 -segment_time 00:05:00 -f segment segment%03d.mp4

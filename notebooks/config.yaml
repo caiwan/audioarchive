@@ -1,0 +1,12 @@
+# Configuration fro local development
+---
+db:
+  host: localhost
+  port: 6379
+  db: 0
+  username: null
+  password: null
+is_manager: True
+is_gui_enabled: True
+is_worker: True
+task_queue_uuid: 00000000-0000-0000-0000-000000000000

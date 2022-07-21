@@ -1,0 +1,1 @@
+# https://stackoverflow.com/questions/18710992/how-to-add-album-art-with-ffmpeg
