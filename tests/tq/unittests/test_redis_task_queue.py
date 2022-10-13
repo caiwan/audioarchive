@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import waiting
 from tq.job_system import JobManager
 
-from tq.task_dispacher import TaskDispatcher, task_handler
+from tq.task_dispacher import TaskDispatcher, task_handler, Task
 from tq.redis_task_queue import RedisTaskQueue
 
 import logging
@@ -26,17 +26,17 @@ def task_dispatcher_with_redis(db_pool):
 
 
 @dataclass
-class DummyTaskOne:
+class DummyTaskOne(Task):
     pass
 
 
 @dataclass
-class DummyTaskTwo:
+class DummyTaskTwo(Task):
     pass
 
 
 @dataclass
-class DummyTaskThree:
+class DummyTaskThree(Task):
     pass
 
 

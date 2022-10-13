@@ -37,7 +37,7 @@ class PendingTask(BaseEntity):
 class PendingTasksDao(BaseDao):
     def __init__(self, db_pool):
         super().__init__(db_pool, PendingTask.schema(), key_prefix=f"pending_tasks.{uuid4()}")
-        # Note: This should not be don this way. Daos are not chared yet. They should be signletons anyway.
+        # Note: This should not be don this way. Daos are not chared yet. They should be singletons anyway.
         self.pending_tasks: Dict[UUID, PendingTask] = defaultdict(PendingTask)
 
     def create_or_update(self, obj: PendingTask) -> UUID:

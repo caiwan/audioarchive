@@ -1,5 +1,4 @@
 import pathlib
-import random
 import tempfile
 
 from tapearchive.models.raw_data import FileDao
@@ -13,10 +12,11 @@ import os
 @pytest.fixture()
 def generate_random_file(size=3 * 1024**2) -> pathlib.Path:
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        tmp.write(random.randbytes(size))
+        tmp.write(os.urandom(size))
         tmp_file = pathlib.Path(tmp.name)
         yield tmp_file
         tmp_file.unlink()
+
 
 
 def test_file_dao(db_pool, generate_random_file):

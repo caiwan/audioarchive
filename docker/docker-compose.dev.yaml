@@ -6,7 +6,7 @@ services:
     command: redis-server
     volumes:
       - redis-data:/var/lib/redis
-      - $PWD/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./docker/redis.conf:/usr/local/etc/redis/redis.conf
 
     environment:
       - REDIS_REPLICATION_MODE=master
@@ -25,11 +25,18 @@ services:
       - redis
 
   audio-archive-manager:
-    image: "caiwan/tapearchive"
+    build: 
+      context: ../
+      dockerfile: ./docker/Dockerfile
+      target: dev
+      args:
+        base_image: ubuntu:focal
+
     volumes:
-      - $PWD/docker/config:/config
-      - $PWD/docker/data:/data
-    # command: sleep infinity
+      - ./config:/config
+      - ./data:/data
+      - ./../:/app
+    command: "'sleep infinity'"
     ports:
       - 5000:5000
 

@@ -43,9 +43,9 @@ class BaseEntity(DataClassJsonMixin):
     id: UUID
 
 
-# TODO: Add db maintainer - aka save after X db commit
+# TODO: Add db maintainer - aka save after X amoount of db commits
 
-
+# TODO: Add hash: hset, hget, hmset, hmget 
 class DaoContext(object):
     def __init__(self, db: redis.Redis, key_prefix: str):
         self._db = db
@@ -66,6 +66,7 @@ class DaoContext(object):
         return self._db.exists(self._key(id))
 
     def set(self, id: UUID, data: bytes) -> UUID:
+        id = id if id else uuid4()
         key = self._key(id)
         self._db.set(key, data)
         return id

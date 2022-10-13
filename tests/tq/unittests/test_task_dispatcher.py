@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import waiting
 from tq.job_system import JobManager
 
-from tq.task_dispacher import TaskDispatcher, LocalTaskQueue, task_handler
+from tq.task_dispacher import TaskDispatcher, LocalTaskQueue, task_handler, Task
 
 import logging
 
@@ -25,17 +25,17 @@ def task_dispatcher():
 
 
 @dataclass
-class DummyTaskOne:
+class DummyTaskOne(Task):
     pass
 
 
 @dataclass
-class DummyTaskTwo:
+class DummyTaskTwo(Task):
     pass
 
 
 @dataclass
-class DummyTaskThree:
+class DummyTaskThree(Task):
     pass
 
 

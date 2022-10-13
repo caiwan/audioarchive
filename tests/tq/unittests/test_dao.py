@@ -20,25 +20,12 @@ class MyDataDao(BaseDao):
     def __init__(self, db_pool):
         super().__init__(db_pool, MyData.schema(), key_prefix="my_data")
 
-    def create_or_update(self, obj: MyData) -> UUID:
-        return self._create_or_update(obj)
-
-    def get_entity(self, id: UUID) -> MyData:
-        return self._get_entity(id)
-
-    def iterate_all(self) -> Iterator[MyData]:
-        for e in self._iterate_all():
-            yield e
-
-    def delete(self, id: UUID):
-        return self._delete(id)
-
     @transactional
-    def save_raw_data(self, ctx:DaoContext, id: UUID, data:bytes) -> UUID:
+    def save_raw_data(self, ctx: DaoContext, id: UUID, data: bytes) -> UUID:
         return ctx.set(id, data)
 
     @transactional
-    def load_raw_data(self, ctx:DaoContext, id: UUID) -> Optional[bytes]:
+    def load_raw_data(self, ctx: DaoContext, id: UUID) -> Optional[bytes]:
         return ctx.get(id)
 
     @transactional
@@ -73,21 +60,20 @@ def test_create_read_delete(db_pool):
 
 def test_create_read_delete_raw_data(db_pool):
     dao = MyDataDao(db_pool)
-    data = random.randbytes(1024**2)
+    data = bytes(bytearray([random.randint(0, 255) for _ in range(1024**2)]))
 
     obj_id = dao.save_raw_data(None, data)
     assert obj_id is not None
 
     read = dao.load_raw_data(obj_id)
-    assert read is not None 
+    assert read is not None
     assert len(read) == len(data)
-    assert all(a == b for a,b in zip(read,data))
+    assert all(a == b for a, b in zip(read, data))
 
     dao.delete(obj_id)
 
     read = dao.load_raw_data(obj_id)
     assert read is None
-
 
 
 def test_stack_push_pop(db_pool):

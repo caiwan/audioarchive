@@ -11,6 +11,8 @@ import pytest
 from unittest.mock import Mock
 from waiting import wait
 
+MAX_TIMEOUT = 30
+
 
 @pytest.fixture()
 def sample_audio_file(db_pool):
@@ -33,7 +35,7 @@ def test_audio_convert_stereo(db_pool, worker_app, task_dispatcher: TaskDispatch
         )
     )
 
-    wait(lambda: convert_done_callback.called, sleep_seconds=0.1, timeout_seconds=10)
+    wait(lambda: convert_done_callback.called, sleep_seconds=0.1, timeout_seconds=MAX_TIMEOUT)
 
     task_done: AudioConversionDone = convert_done_callback.call_args.args[0]
     assert task_done
@@ -42,6 +44,9 @@ def test_audio_convert_stereo(db_pool, worker_app, task_dispatcher: TaskDispatch
     file_dao = FileDao(db_pool)
     with file_dao.as_tempfile(task_done.target_file_id) as file:
         assert os.path.getsize(pathlib.Path(file.name)) > 0
+
+
+MAX_TIMEOUT
 
 
 def test_audio_convert_split_mono(db_pool, worker_app, task_dispatcher: TaskDispatcher, sample_audio_file):
@@ -60,7 +65,7 @@ def test_audio_convert_split_mono(db_pool, worker_app, task_dispatcher: TaskDisp
             )
         )
 
-    wait(lambda: convert_done_callback.call_count == 2, sleep_seconds=0.1, timeout_seconds=10)
+    wait(lambda: convert_done_callback.call_count == 2, sleep_seconds=0.1, timeout_seconds=MAX_TIMEOUT)
 
     for arg in convert_done_callback.call_args.args:
         task_done: AudioConversionDone = arg

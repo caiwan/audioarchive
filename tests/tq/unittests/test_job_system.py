@@ -30,7 +30,7 @@ def test_job_system_single_task(job_manager, job_count):
     for _, job in job_fns:
         job_manager.schedule_job(job)
 
-    wait(lambda: all(fn.called for fn, _ in job_fns), sleep_seconds=0.1, timeout_seconds=2)
+    wait(lambda: all(fn.called for fn, _ in job_fns), sleep_seconds=0.1, timeout_seconds=5)
 
 
 @pytest.mark.parametrize("job_count", [1, 10, 100, 1000, 10000])

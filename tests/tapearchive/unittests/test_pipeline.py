@@ -1,3 +1,4 @@
+import pytest
 from tapearchive.workflow.dependency_tree import DependencyTree, Stage
 
 
@@ -16,6 +17,7 @@ class SecondDummyStage(Stage):
         return True
 
 
+@pytest.mark.skip("Not yet implemented")
 def test_pipeline_execution():
     pipeline = DependencyTree("test_pipeline")
     pipeline.new_stage(DummyStage).depends_on(SecondDummyStage)
