@@ -1,5 +1,5 @@
 import enum
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -29,6 +29,7 @@ class Attachment(BaseEntity):
     path: str
     name: str
     meta: Optional[Dict[str, str]]
+
 
 @dataclass
 class AudioAttachment(Attachment):
@@ -64,23 +65,28 @@ class CatalogDao(BaseDao):
     def __init__(self, db_pool):
         super().__init__(db_pool, CatalogEntry.schema(), key_prefix="catalog")
 
-    def _catalog_ctx(self, ctx: DaoContext) -> DaoContext:
-        return DaoContext(ctx.db, "catalog_numbers")
-
     @transactional
     def create_or_update(self, ctx: DaoContext, obj: CatalogEntry) -> UUID:
-        # TODO: add catalog number -> id [name := catalog number]
+        with ctx.create_sub_context("catalog_names") as cat_ctx:
+            names = set(cat_ctx.get_hash_entity(None, obj.name) or [])
+            names.add(obj.id)
+            cat_ctx.set_hash_entity(None, obj.name, list(names))
+
         return ctx.create_or_update(obj.to_dict(), obj.id)
 
     @transactional
-    def get_ids_by_catalog_name(self, ctx: DaoContext, catalog_name:str) -> List[UUID]:
-        # catalog_ctx = self._catalog_ctx(ctx)
-        # catalog_ctx.list_push()
+    def get_ids_by_catalog_name(self, ctx: DaoContext, catalog_name: str) -> List[UUID]:
+        with ctx.create_sub_context("catalog_names") as cat_ctx:
+            return list(cat_ctx.get_hash_entity(None, catalog_name) or set())
+
+    @transactional
+    def get_entries_by_cat_name(self, ctx: DaoContext, catalog_name: str) -> List[CatalogEntry]:
         return []
 
     @transactional
-    def get_entries_by_cat_number(self, ctx: DaoContext, catalog_name:str) -> List[CatalogEntry]:
-        return []
+    def get_all_cat_names(self, ctx: DaoContext) -> List[str]:
+        with ctx.create_sub_context("catalog_names") as cat_ctx:
+            return list(cat_ctx.iterate_hash_keys(None))
 
     @transactional
     def delete(self, ctx: DaoContext, id: UUID):

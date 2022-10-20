@@ -1,4 +1,6 @@
-from typing import Optional, Type, List, Callable, Iterator, Dict, Any, Union
+from contextlib import contextmanager
+import time
+from typing import Optional, Set, Type, List, Callable, Iterator, Dict, Any, Union
 from uuid import UUID, uuid4
 
 from functools import wraps
@@ -24,12 +26,20 @@ class CustomJSONEncoder(json.JSONEncoder):
             return str(obj)
 
         if issubclass(type(obj), Enum):
-            return str(obj)
+            return str(obj.value)
 
         if issubclass(type(obj), DataClassJsonMixin):
             return obj.to_dict()
 
         return json.JSONEncoder.default(self, obj)
+
+
+def _to_json(obj: Any) -> str:
+    return json.dumps(obj, cls=CustomJSONEncoder)
+
+
+def _from_json(_json: Optional[bytes]) -> Optional[Any]:
+    return json.loads(_json.decode()) if _json else None
 
 
 # https://github.com/redis/redis-py
@@ -40,16 +50,29 @@ DEFAULT_BUCKET_SIZE = 10
 
 @dataclass
 class BaseEntity(DataClassJsonMixin):
-    id: UUID
+    id: Optional[UUID]
 
+
+# TODO: Unfuck names [type] _ [what_operation] like hash_get_keys() or the other way aorund, make it uniform at least
 
 # TODO: Add db maintainer - aka save after X amoount of db commits
-
-# TODO: Add hash: hset, hget, hmset, hmget 
+@dataclass
 class DaoContext(object):
-    def __init__(self, db: redis.Redis, key_prefix: str):
+
+    # TODO: Properties + use proper setters
+    shard_hint: Optional[str] = None
+    watches: Optional[Set[str]] = None
+    value_from_callable: bool = True
+    watch_delay: Optional[float] = None
+
+    def __init__(self, db: redis.Redis, name_prefix: str):
         self._db = db
-        self._key_prefix: redis.ConnectionPool = key_prefix
+        self._name_prefix: redis.ConnectionPool = name_prefix
+
+    @contextmanager
+    def create_sub_context(self, name_prefix):
+        # TODO: When creating a new sub-ctx make it able to set certain flags for the transaction in the root context itself
+        yield DaoContext(self._db, name_prefix)
 
     @property
     def db(self):
@@ -57,138 +80,151 @@ class DaoContext(object):
 
     @property
     def wildcard(self) -> str:
-        return f"{self._key_prefix}:*"
+        return f"{self._name_prefix}:*"
 
-    def _key(self, id: UUID) -> str:
-        return f"{self._key_prefix}:{str(id)}"
+    def _name(self, id: Optional[UUID]) -> str:
+        return f"{self._name_prefix}:{str(id)}" if id else self._name_prefix
 
-    def is_exists(self, id: UUID) -> bool:
-        return self._db.exists(self._key(id))
+    def is_exists(self, id: Optional[UUID]) -> bool:
+        return self._db.exists(self._name(id))
 
-    def set(self, id: UUID, data: bytes) -> UUID:
+    def set(self, id: Optional[UUID], data: bytes) -> UUID:
         id = id if id else uuid4()
-        key = self._key(id)
-        self._db.set(key, data)
+        name = self._name(id)
+        self._db.set(name, data)
         return id
 
-    def create_or_update(self, obj: Dict, id: UUID = None) -> UUID:
+    def create_or_update(self, obj: Dict, id: Optional[UUID] = None) -> UUID:
         return self.set(
             id if id else uuid4(),
-            json.dumps(obj, cls=CustomJSONEncoder),
+            _to_json(obj),
         )
 
-    def get(self, id: UUID) -> Optional[bytes]:
-        key = self._key(id)
-        if not self._db.exists(key):
+    def get(self, id: Optional[UUID]) -> Optional[bytes]:
+        name = self._name(id)
+        if not self._db.exists(name):
             return None
-        return self._db.get(key)
+        return self._db.get(name)
 
-    def get_entity(self, id: UUID) -> Optional[Dict]:
+    def get_entity(self, id: Optional[UUID]) -> Optional[Dict]:
         item = self.get(id)
-        return json.loads(item) if item else None
+        return _from_json(item)
 
     def iterate_all_keys(self) -> Iterator[UUID]:
         for db_key in self._db.scan_iter(self.wildcard):
-            key = db_key.decode("utf-8").split(":")[-1]
-            yield UUID(key)
+            name = db_key.decode("utf-8").split(":")[-1]
+            yield UUID(name)
 
     def iterate_all_entities(self) -> Iterator[Dict]:
         for db_key in self._db.scan_iter(self.wildcard):
             item = self._db.get(db_key)
-            yield json.loads(item) if item else None
+            yield _from_json(item)
 
-    def delete(self, id: UUID):
+    def delete(self, id: Optional[UUID]):
         self._db.delete(self._key(id))
 
-    def list_push(self, id: UUID, data: Union[str, bytes]) -> int:
-        key = self._key(id)
-        return self._db.lpush(key, data)
+    def list_push(self, id: Optional[UUID], data: Union[str, bytes]) -> int:
+        name = self._name(id)
+        return self._db.lpush(name, data)
 
-    def list_push_entity(self, id: UUID, obj: Dict) -> int:
-        return self.list_push(id, json.dumps(obj, cls=CustomJSONEncoder))
+    def list_push_entity(self, id: Optional[UUID], obj: Dict) -> int:
+        return self.list_push(id, _to_json(obj))
 
-    def list_pop(self, id: UUID) -> bytes:
-        key = self._key(id)
-        return self._db.lpop(key)
+    def list_pop(self, id: Optional[UUID]) -> Optional[bytes]:
+        name = self._name(id)
+        return self._db.lpop(name)
 
-    def list_pop_entity(self, id: UUID) -> Dict:
-        item = self.list_pop(id)
-        return json.loads(item.decode()) if item else None
+    def list_pop_entity(self, id: Optional[UUID]) -> Optional[Dict]:
+        return _from_json(self.list_pop(id))
 
-    def get_list_length(self, id: UUID) -> int:
-        key = self._key(id)
-        if not self._db.exists(key):
+    def get_list_length(self, id: Optional[UUID]) -> int:
+        name = self._name(id)
+        if not self._db.exists(name):
             return 0
 
-        return self._db.llen(key)
+        return self._db.llen(name)
 
-    def iter_all_from_list(self, id: UUID, fetch_bucket_size: int = DEFAULT_BUCKET_SIZE) -> Iterator[Any]:
+    def iter_all_from_list(self, id: Optional[UUID], fetch_bucket_size: int = DEFAULT_BUCKET_SIZE) -> Iterator[Any]:
         fetch_bucket_size = fetch_bucket_size if fetch_bucket_size > 0 else DEFAULT_BUCKET_SIZE
-        key = self._key(id)
+        name = self._name(id)
         count = self.get_list_length(id)
         if count > 0:
             cursor = 0
             while cursor < count:
                 delta = min(fetch_bucket_size, count - cursor)
-                items = self._db.lrange(key, cursor, cursor + delta)
+                items = self._db.lrange(name, cursor, cursor + delta)
                 for item in items:
                     yield item
                 cursor += delta
 
-    def iter_all_entities_from_list(self, id: UUID, fetch_bucket_size: int = DEFAULT_BUCKET_SIZE) -> Iterator[Any]:
+    def iter_all_entities_from_list(self, id: Optional[UUID], fetch_bucket_size: int = DEFAULT_BUCKET_SIZE) -> Iterator[Any]:
         for item in self.iter_all_from_list(id, fetch_bucket_size=fetch_bucket_size):
-            yield json.loads(item) if item else None
+            yield _from_json(item)
 
-    def remove_from_list(self, id: UUID, obj: Any):
-        key = self._key(id)
-        return self._db.lrem(key, 1, json.dumps(obj, cls=CustomJSONEncoder))
+    def remove_from_list(self, id: Optional[UUID], obj: Any):
+        name = self._name(id)
+        return self._db.lrem(name, 1, _to_json(obj))
 
-    def remove_from_list_by_id(self, id: UUID, index: int):
+    def remove_from_list_by_id(self, id: Optional[UUID], index: int):
         placeholder = str(uuid4())
-        key = self._key(id)
-        self._db.lset(key, index, placeholder)
-        return self._remove_from_list(key, placeholder)
+        name = self._name(id)
+        self._db.lset(name, index, placeholder)
+        return self._remove_from_list(name, placeholder)
 
-    def bulk_remove_from_list_by_id(self, id: UUID, indices: List[int]):
+    def bulk_remove_from_list_by_id(self, id: Optional[UUID], indices: List[int]):
         placeholders: List[str] = []
-        key = self._key(id)
+        name = self._name(id)
         for index in indices:
             random_uuid = str(uuid4())
-            self._db.lset(key, index, random_uuid)
+            self._db.lset(name, index, random_uuid)
             placeholders.append(random_uuid)
         count = 0
         for placeholder in placeholders:
-            count += self._remove_from_list(key, placeholder)
+            count += self._remove_from_list(name, placeholder)
         return count
+
+    def get_hash(self, id: Optional[UUID], key: str) -> Optional[bytes]:
+        name = self._name(id)
+        return self._db.hget(name, key)
+
+    def set_hash(self, id: Optional[UUID], key: str, value: bytes) -> int:
+        name = self._name(id)
+        return self._db.hset(name, key, value)
+
+    def has_hash_key(self, id: Optional[UUID], key: str) -> bool:
+        return self._db.hexists(self._name(id), key)
+
+    def get_hash_entity(self, id: Optional[UUID], key: str) -> Optional[Any]:
+        return _from_json(self.get_hash(id, key))
+
+    def set_hash_entity(self, id: Optional[UUID], key: str, value: Any) -> int:
+        name = self._name(id)
+        return self.set_hash(id, key, _to_json(value))
+
+    def iterate_hash_keys(self, id: Optional[UUID]) -> Iterator[str]:
+        for key in self._db.hkeys(self._name(id)):
+            yield key.decode()
 
     def cleanup(self) -> int:
         counter = 0
-        for key in self._db.scan_iter(self._wildcard):
-            counter += self._db.delete(key)
+        for name in self._db.scan_iter(self._wildcard):
+            counter += self._db.delete(name)
         return counter
 
-    def add_to_set(self, id: UUID, obj: Any):
-        key = self._key(id)
-        self._db.sadd(key, json.dumps(obj, cls=CustomJSONEncoder))
+    def add_to_set(self, id: Optional[UUID], obj: Any):
+        name = self._name(id)
+        self._db.sadd(name, _to_json(obj))
 
-    def get_all_entities_from_set(self, id: UUID) -> Iterator[Any]:
-        key = self._key(id)
-        for item in self._db.smembers(key):
-            yield json.loads(item) if item else None
+    def iterate_all_entities_from_set(self, id: Optional[UUID]) -> Iterator[Any]:
+        name = self._name(id)
+        for item in self._db.smembers(name):
+            yield _from_json(item)
 
-    def get_set_length(self, id: UUID):
-        key = self._key(id)
-        if not self._db.exists(key):
-            return 0
-        return self._db.scard(self.key)
+    def get_set_length(self, id: Optional[UUID]):
+        name = self._name(id)
+        return self._db.scard(name) if self._db.exists(name) else 0
 
-    def iterate_all_entities_from_set(self, id: UUID) -> Iterator[Any]:
-        if self._get_set_length(id) > 0:
-            # Bazdmeg az anyad te fos szar
-            for item in self._get_all_from_set(id):
-                yield json.loads(item) if item else None
-
-    # TODO: Add Optional expiration time
+    # TODO: Add Optional expiration time - maybe through soem decoration like AOP?
 
     def trigger_db_cleanup(self):
         try:
@@ -199,7 +235,7 @@ class DaoContext(object):
             pass
 
 
-# TODO: Add Read only flag
+# TODO: Add a Read-only flag
 def transactional(fn: Callable) -> Callable:
     @wraps(fn)
     def tansaction_wrapper(*args, **kwargs):
@@ -207,8 +243,14 @@ def transactional(fn: Callable) -> Callable:
         connection_pool = obj_self._db_pool
         ctx = DaoContext(redis.Redis(connection_pool=connection_pool), obj_self._key_prefix)
 
-        # TODO use pipe with context
-        return ctx._db.transaction(lambda pipe: fn(obj_self, ctx, *args[1:], **kwargs), value_from_callable=True)
+        # TODO add params from ctx
+        return ctx._db.transaction(
+            lambda pipe: fn(obj_self, ctx, *args[1:], **kwargs),
+            value_from_callable=ctx.value_from_callable,
+            shard_hint=ctx.shard_hint,
+            watches=ctx.watches,
+            watch_delay=ctx.watch_delay,
+        )
 
     return tansaction_wrapper
 
@@ -225,7 +267,7 @@ class BaseDao:
         return ctx.create_or_update(obj.to_dict(), obj.id)
 
     @transactional
-    def get_entity(self, ctx: DaoContext, id: UUID) -> DataClassJsonMixin:
+    def get_entity(self, ctx: DaoContext, id: Optional[UUID]) -> DataClassJsonMixin:
         data = ctx.get_entity(id)
         return self._schema.load(data) if data else None
 
@@ -244,7 +286,7 @@ class BaseDao:
             yield key
 
     @transactional
-    def delete(self, ctx: DaoContext, id: UUID):
+    def delete(self, ctx: DaoContext, id: Optional[UUID]):
         return ctx.delete(id)
 
     @property

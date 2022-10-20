@@ -94,3 +94,6 @@ def test_stack_push_pop(db_pool):
 
     for obj in fetch():
         assert test_objects.pop() == obj
+
+
+#TODO: Test hashes 

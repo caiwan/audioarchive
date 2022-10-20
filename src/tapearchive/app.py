@@ -1,4 +1,5 @@
 from asyncio.log import logger
+from asyncore import dispatcher
 from contextlib import ExitStack
 
 import json
@@ -6,7 +7,6 @@ import logging
 
 import redis
 
-from tq.database import CustomJSONEncoder
 from tq.task_dispacher import TaskDispatcher
 from tq.redis_task_queue import RedisTaskQueue
 from tq.job_system import JobManager
@@ -54,3 +54,4 @@ def create_app(config: AppConfig, stack: ExitStack):
     dispatcher = create_dispatcher(connection_pool, config, stack)
 
     return dispatcher
+
