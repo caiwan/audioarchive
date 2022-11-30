@@ -1,0 +1,13 @@
+version: "3.2"
+services:
+
+  jupyter:
+    image: "jupyter/scipy-notebook"
+    command: ["jupyter", "notebook", "--port=8888", "--no-browser", "--ip=0.0.0.0", "--allow-root"]
+    ports:
+      - 8888:8888
+    
+
+  jupyter-tensorflow:
+    image: "jupyter/tensorflow-notebook"
+    profiles: ["tensorflow"]

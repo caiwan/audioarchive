@@ -1,8 +1,5 @@
 {
     "python.formatting.provider": "black",
-    "python.formatting.blackArgs": [
-        "--line-length=240"
-    ],
     "python.testing.pytestArgs": [
         "tests"
     ],

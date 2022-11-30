@@ -3,7 +3,7 @@ import pathlib
 
 
 from tq.task_dispacher import TaskDispatcher
-from tapearchive.workflow.tasks.audio_convert import ConvertAudio, AudioConversionDone
+from tapearchive.tasks.audio_convert import ConvertAudio, AudioConversionDone
 from tapearchive.models.catalog import ChannelMode
 from tapearchive.models.raw_data import FileDao
 
@@ -20,6 +20,7 @@ def sample_audio_file(db_pool):
     return file_dao.pull_from_disk(pathlib.Path(__file__).parent.absolute() / "data" / "wav_868kb.wav")
 
 
+@pytest.mark.slow
 def test_audio_convert_stereo(db_pool, worker_app, task_dispatcher: TaskDispatcher, sample_audio_file):
 
     convert_done_callback = Mock()
@@ -49,6 +50,7 @@ def test_audio_convert_stereo(db_pool, worker_app, task_dispatcher: TaskDispatch
 MAX_TIMEOUT
 
 
+@pytest.mark.slow
 def test_audio_convert_split_mono(db_pool, worker_app, task_dispatcher: TaskDispatcher, sample_audio_file):
 
     convert_done_callback = Mock()

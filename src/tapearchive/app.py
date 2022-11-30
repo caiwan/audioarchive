@@ -13,8 +13,8 @@ from tq.job_system import JobManager
 
 from tapearchive.config import AppConfig
 
-from tapearchive.workflow.tasks.audio_convert import AudioConverterHandler
-from tapearchive.workflow.tasks.audio_analisis import FindKeyHandler
+from tapearchive.tasks.audio_convert import AudioConverterHandler
+from tapearchive.tasks.audio_analisis import FindKeyHandler
 
 
 LOGGER = logging.getLogger(__name__)

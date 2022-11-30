@@ -35,3 +35,5 @@ def task_dispatcher(db_pool) -> TaskDispatcher:
 @pytest.fixture(scope="function")
 def worker_app(app_config, task_dispatcher, db_pool, db_autoclean):
     register_task_dispatchers(task_dispatcher, db_pool, app_config)
+
+

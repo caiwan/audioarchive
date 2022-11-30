@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from typing import Callable, Optional, Type, List, Any, Dict, Iterator
+from typing import Callable, Optional, Type, List, Any, Dict, Iterator, TypeVar
 from contextlib import contextmanager
 from multiprocessing import Event
 
@@ -19,15 +19,22 @@ LOGGER = logging.getLogger(__name__)
 @dataclass
 class Task:
     @property
-    def task_id(self)->Optional[UUID]:
+    def task_id(self) -> Optional[UUID]:
         return getattr(self, "_task_id", None)
+
 
 @dataclass
 class TaskResult(Task):
     task: Task
+
     @property
-    def task_id(self)->Optional[UUID]:
+    def task_id(self) -> Optional[UUID]:
         return self.task.task_id
+
+
+TaskType = TypeVar("TaskType", bound=Task)
+TaskResultType = TypeVar("TaskResultType", bound=TaskResult)
+
 
 class TerminateDispatcherLoop(Task):
     pass
@@ -85,6 +92,7 @@ class TaskDispatcher:
         return self
 
     def __exit__(self, *a, **w):
+        LOGGER.debug("Dispatch loop terminating.")
         self._exit_event.set()
 
     def terminate(self):
@@ -97,7 +105,7 @@ class TaskDispatcher:
             if hasattr(func, "task_hanlder_type_list"):
                 yield func, func.task_hanlder_type_list
 
-    def register_task_handler_callback(self, task_type:Type, handler_func: Callable):
+    def register_task_handler_callback(self, task_type: Type, handler_func: Callable):
         self.task_handlers[task_type].append(handler_func)
 
     def register_task_handler(self, dispatcher: Any):
@@ -106,7 +114,7 @@ class TaskDispatcher:
                 # TODO: Use defaultdict
                 if task_type not in self.task_handlers:
                     self.task_handlers[task_type] = []
-                
+
                 self.task_handlers[task_type].append(bind_function(handler_func, dispatcher))
                 LOGGER.debug(f"{task_type} had been registered to {dispatcher}")
 
@@ -118,7 +126,6 @@ class TaskDispatcher:
         LOGGER.debug(f"Task posted: {task}")
         self.task_queque.put(task)
         return task.task_id
-
 
     def _schedule_dispatch_job(self):
         job = self.job_manager.create_job(bind_function(TaskDispatcher._dispatch_loop, self))

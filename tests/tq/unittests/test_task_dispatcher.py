@@ -15,15 +15,6 @@ import logging
 LOGGER = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="function")
-def task_dispatcher():
-    task_queue = LocalTaskQueue()
-    with ExitStack() as stack:
-        job_manager = stack.enter_context(JobManager())
-        dispatcher = stack.enter_context(TaskDispatcher(task_queue, job_manager))
-        yield dispatcher
-
-
 @dataclass
 class DummyTaskOne(Task):
     pass

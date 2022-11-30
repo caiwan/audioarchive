@@ -26,7 +26,7 @@ services:
 
   audio-archive-manager:
     build: 
-      context: ../
+      context: ./
       dockerfile: ./docker/Dockerfile
       target: dev
       args:
@@ -35,7 +35,7 @@ services:
     volumes:
       - ./config:/config
       - ./data:/data
-      - ./../:/app
+      - ./:/app
     command: "'sleep infinity'"
     ports:
       - 5000:5000

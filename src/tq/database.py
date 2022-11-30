@@ -121,7 +121,7 @@ class DaoContext(object):
             yield _from_json(item)
 
     def delete(self, id: Optional[UUID]):
-        self._db.delete(self._key(id))
+        self._db.delete(self._name(id))
 
     def list_push(self, id: Optional[UUID], data: Union[str, bytes]) -> int:
         name = self._name(id)
