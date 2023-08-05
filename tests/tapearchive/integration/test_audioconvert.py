@@ -3,9 +3,11 @@ import pathlib
 
 
 from tq.task_dispacher import TaskDispatcher
+from tq.database.gridfs_dao import BucketGridFsDao
+
 from tapearchive.tasks.audio_convert import ConvertAudio, AudioConversionDone
 from tapearchive.models.catalog import ChannelMode
-from tapearchive.models.raw_data import FileDao
+
 
 import pytest
 from unittest.mock import Mock
@@ -15,14 +17,14 @@ MAX_TIMEOUT = 30
 
 
 @pytest.fixture()
-def sample_audio_file(db_pool):
-    file_dao = FileDao(db_pool)
-    return file_dao.pull_from_disk(pathlib.Path(__file__).parent.absolute() / "data" / "wav_868kb.wav")
+def sample_audio_file(mongodb_client):
+    file_dao = BucketGridFsDao(mongodb_client)
+
+    with (pathlib.Path(__file__).parent.absolute() / "data" / "wav_868kb.wav").open("rb") as file:
+        return file_dao.store("wav_868kb.wav", file.read())
 
 
-@pytest.mark.slow
-def test_audio_convert_stereo(db_pool, worker_app, task_dispatcher: TaskDispatcher, sample_audio_file):
-
+def test_audio_convert_stereo(mongodb_client, worker_app, task_dispatcher: TaskDispatcher, sample_audio_file):
     convert_done_callback = Mock()
     task_dispatcher.register_task_handler_callback(AudioConversionDone, convert_done_callback)
 
@@ -42,15 +44,11 @@ def test_audio_convert_stereo(db_pool, worker_app, task_dispatcher: TaskDispatch
     assert task_done
     assert task_done.target_file_id
 
-    file_dao = FileDao(db_pool)
+    file_dao = BucketGridFsDao(mongodb_client)
     with file_dao.as_tempfile(task_done.target_file_id) as file:
         assert os.path.getsize(pathlib.Path(file.name)) > 0
 
 
-MAX_TIMEOUT
-
-
-@pytest.mark.slow
 def test_audio_convert_split_mono(db_pool, worker_app, task_dispatcher: TaskDispatcher, sample_audio_file):
 
     convert_done_callback = Mock()

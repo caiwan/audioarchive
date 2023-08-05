@@ -7,13 +7,12 @@ import subprocess
 import logging
 import tempfile
 from uuid import UUID
-from numpy import source
 
-from tapearchive.models.raw_data import FileDao
 from tq import bind_function
 
 from tq.job_system import JobManager, Job
 from tq.task_dispacher import Task, TaskDispatcher, TaskResult, task_handler
+from tq.database.gridfs_dao import BucketGridFsDao
 
 from tapearchive.models.catalog import ChannelMode
 
@@ -48,15 +47,15 @@ class AudioConverterHandler:
 
         self.running_processes = []
 
-        self.file_dao = FileDao(db_pool)
+        self.file_dao = BucketGridFsDao(db_pool)
 
-        # TODO: Config 
+        # TODO: Config
         self.max_processes = 16
 
     @task_handler(ConvertAudio)
     def convert_audio(self, task: ConvertAudio, dispatcher: TaskDispatcher = None, job: Job = None, manager: JobManager = None):
         if len(self.running_processes) > self.max_processes:
-            # Put back the taske at the end of the queue 
+            # Put back the taske at the end of the queue
             dispatcher.post_task(task)
             return
 
@@ -78,7 +77,7 @@ class AudioConverterHandler:
 
         tmp_files_context = ExitStack()
         tmp_source = tmp_files_context.enter_context(self.file_dao.as_tempfile(task.source_file_id, suffix=f".{task.source_format}"))
-        tmp_target = tmp_files_context.enter_context(tempfile.NamedTemporaryFile('wb', suffix=f".{task.target_format}"))
+        tmp_target = tmp_files_context.enter_context(tempfile.NamedTemporaryFile("wb", suffix=f".{task.target_format}"))
 
         target_file = pathlib.Path(tmp_target.name)
         source_file = pathlib.Path(tmp_source.name)
@@ -95,7 +94,7 @@ class AudioConverterHandler:
         manager.schedule_job(ffmpeg_job)
         manager.wait(ffmpeg_job)
 
-    def _poll_ffmpeg(self, ffmpeg_process: subprocess.Popen, task: ConvertAudio, target_file_name :pathlib.Path, tmp_file_context:ExitStack, dispatcher: TaskDispatcher = None, job: Job = None, manager: JobManager = None):
+    def _poll_ffmpeg(self, ffmpeg_process: subprocess.Popen, task: ConvertAudio, target_file_name: pathlib.Path, tmp_file_context: ExitStack, dispatcher: TaskDispatcher = None, job: Job = None, manager: JobManager = None):
         returncode = ffmpeg_process.poll()
         if returncode is None:
             try:
@@ -117,7 +116,14 @@ class AudioConverterHandler:
                 manager.schedule_job(job)
                 return
 
-        else: 
+        else:
+            # TODO: Remove redundant code
+            stdout_data, stderr_data = ffmpeg_process.communicate()
+            if stdout_data:
+                LOGGER.info(stdout_data.decode("UTF-8"))
+            if stderr_data:
+                LOGGER.error(stderr_data.decode("UTF-8"))
+
             # Todo: invoke callback here
             if returncode == 0:
                 target_file_id = self.file_dao.pull_from_disk(target_file_name)
@@ -134,9 +140,8 @@ class AudioConverterHandler:
                         returncode=returncode,
                     )
                 )
-            
+
             tmp_file_context.close()
-            
 
     @task_handler(AudioConversionDone)
     def conversion_done(self, task: AudioConversionDone, dispatcher: TaskDispatcher = None, job: Job = None, manager: JobManager = None):
