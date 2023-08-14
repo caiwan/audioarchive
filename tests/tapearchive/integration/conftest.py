@@ -116,7 +116,11 @@ def task_dispatcher(redis_pool) -> TaskDispatcher:
     with ExitStack() as stack:
         job_manager = stack.enter_context(JobManager())
         dispatcher = stack.enter_context(TaskDispatcher(task_queue, job_manager))
+        
         yield dispatcher
+
+        dispatcher.terminate()
+        job_manager.join(10)
 
 
 @pytest.fixture(scope="function")

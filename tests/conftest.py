@@ -15,7 +15,18 @@ DB_HOST = "localhost"
 
 
 def pytest_addoption(parser):
-    parser.addoption("--runslow", action="store_true", default=False, help="run slow tests")
+    parser.addoption(
+        "--runslow",
+        action="store_true",
+        default=False,
+        help="run slow tests",
+    )
+
+
+@pytest.fixture(scope="function", autouse=True)
+def setup_logs(caplog):
+    caplog.set_level(logging.INFO, logger="tq.job_system")
+    caplog.set_level(logging.INFO, logger="tq.task_dispacher")
 
 
 def pytest_collection_modifyitems(config, items):
