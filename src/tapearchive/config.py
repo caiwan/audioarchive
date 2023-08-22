@@ -6,7 +6,7 @@ import pathlib
 
 
 @dataclass
-class DBConfig(DataClassJsonMixin):
+class RedisDBConfig(DataClassJsonMixin):
     host: str = "localhost"
     port: int = 6379
     db: int = 0
@@ -15,8 +15,14 @@ class DBConfig(DataClassJsonMixin):
 
 
 @dataclass
+class MongoDBConfig(DataClassJsonMixin):
+    url: str = "mongodb://localhost:27017"
+
+
+@dataclass
 class AppConfig(DataClassJsonMixin):
-    db: DBConfig
+    redis: RedisDBConfig
+    mongo: MongoDBConfig
     is_manager: bool = True
     is_gui_enabled: bool = True
     is_worker: bool = True

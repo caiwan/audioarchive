@@ -1,11 +1,16 @@
+from collections import defaultdict
 import enum
-from typing import Optional, List, Dict
-from dataclasses import dataclass
+import pathlib
+from typing import Iterator, Optional, List, Dict, Tuple
+from dataclasses import dataclass, field
 from uuid import UUID
+import bson
+from dataclasses_json import config
+import marshmallow
 
-from dataclasses_json import DataClassJsonMixin
 
-from tq.database import BaseDao, BaseEntity, DaoContext, transactional
+from tq.database.db import transactional, BaseEntity
+from tq.database.mongo_dao import BaseMongoDao, MongoDaoContext
 
 
 @enum.unique
@@ -25,64 +30,92 @@ class ChannelMode(enum.Enum):
 
 @dataclass
 class Attachment(BaseEntity):
-    type: AttachmentType
-    path: str
     name: str
-    meta: Optional[Dict[str, str]]
+    type: AttachmentType = field(
+        metadata=config(
+            encoder=lambda x: x.value,
+            decoder=lambda x: AttachmentType(x),
+            mm_field=marshmallow.fields.Enum(AttachmentType),
+        )
+    )
+    path: pathlib.Path = field(
+        metadata=config(
+            encoder=lambda x: str(x),
+            decoder=lambda x: pathlib.Path(x),
+            mm_field=marshmallow.fields.String(),
+        )
+    )
+    meta: Optional[Dict[str, str]] = field(default_factory=defaultdict(str))
+
 
 @dataclass
 class AudioAttachment(Attachment):
-    format: str  # mp3 | flac | etc
+    format: Optional[str] = None  # mp3 | flac | etc
 
 
 @dataclass
 class Group(BaseEntity):
-    name: str
+    name: Optional[str] = None
 
 
 @dataclass
 class RecordingEntry(BaseEntity):
     name: str
-    source_channel_mode: ChannelMode
-    description: Optional[str]
-    audio_files: Optional[List[AudioAttachment]]
-    audio_sources: Optional[List[AudioAttachment]]
-    meta: Optional[Dict[str, str]]
+    source_channel_mode: ChannelMode = field(
+        metadata=config(
+            encoder=lambda x: x.value,
+            decoder=lambda x: ChannelMode(x),
+            mm_field=marshmallow.fields.Enum(ChannelMode),
+        )
+    )
+    description: Optional[str] = None
+    audio_files: Optional[List[AudioAttachment]] = None
+    audio_sources: Optional[List[AudioAttachment]] = None
+    meta: Optional[Dict[str, str]] = None
 
 
 @dataclass
 class CatalogEntry(BaseEntity):
     name: str
     recordings: List[RecordingEntry]
-    groups: Optional[List[Group]]
-    attachments: Optional[List[Attachment]]
-    description: Optional[str]
-    meta: Optional[Dict[str, str]]
+    groups: Optional[List[Group]] = None
+    attachments: Optional[List[Attachment]] = None
+    description: Optional[str] = None
+    meta: Optional[Dict[str, str]] = None
 
 
-class CatalogDao(BaseDao):
+# ---
+
+
+class CatalogDao(BaseMongoDao):
     def __init__(self, db_pool):
-        super().__init__(db_pool, CatalogEntry.schema(), key_prefix="catalog")
-
-    def _catalog_ctx(self, ctx: DaoContext) -> DaoContext:
-        return DaoContext(ctx.db, "catalog_numbers")
+        super().__init__(db_pool, CatalogEntry, key_prefix="catalog")
 
     @transactional
-    def create_or_update(self, ctx: DaoContext, obj: CatalogEntry) -> UUID:
-        # TODO: add catalog number -> id [name := catalog number]
-        return ctx.create_or_update(obj.to_dict(), obj.id)
+    def get_id_by_catalog_name(
+        self, catalog_name: str, ctx: MongoDaoContext
+    ) -> Iterator[UUID]:
+        item = ctx.collection.find_one({"name": catalog_name}, {"_id": 1})
+        if item is not None:
+            yield bson.Binary.as_uuid(item["_id"])
 
     @transactional
-    def get_ids_by_catalog_name(self, ctx: DaoContext, catalog_name:str) -> List[UUID]:
-        # catalog_ctx = self._catalog_ctx(ctx)
-        # catalog_ctx.list_push()
-        return []
+    def get_entry_by_cat_number(
+        self, catalog_name: str, ctx: MongoDaoContext
+    ) -> CatalogEntry:
+        item = ctx.collection.find_one({"name": catalog_name})
+        if item is not None:
+            item = ctx.desanitize(item)
+            return self.schema.from_dict(item)
+        return None
 
     @transactional
-    def get_entries_by_cat_number(self, ctx: DaoContext, catalog_name:str) -> List[CatalogEntry]:
-        return []
+    def get_all_catalog_names(self, ctx: MongoDaoContext) -> Iterator[Tuple[UUID, str]]:
+        for item in ctx.collection.find({}, {"name": 1}):
+            yield bson.Binary.as_uuid(item["_id"]), item["name"]
 
-    @transactional
-    def delete(self, ctx: DaoContext, id: UUID):
-        # TODO: Remove catalog name
-        return ctx.delete(id)
+    # TODO:
+    #       - CRUD recordings
+    #       - CRUD recording attachments [both]
+    #       - CRUD attachments
+    #       - CRUD groups

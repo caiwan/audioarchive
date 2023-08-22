@@ -78,7 +78,8 @@ def parse_args() -> object:
     )
 
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         dest="target_file",
         type=pathlib.Path,
         required=True,
@@ -119,7 +120,7 @@ class FindKeyTaskResultHandler:
                 chroma_map=dict([(k, float(v)) for k, v in task.chroma_map.items()]),
                 most_likely_key=task.most_likely_key[0],
                 most_likely_key_confidence=float(task.most_likely_key[1]),
-                second_most_likely_key=task.second_most_likely_key[0] if task.second_most_likely_key else None ,
+                second_most_likely_key=task.second_most_likely_key[0] if task.second_most_likely_key else None,
                 second_most_likely_key_confidence=float(task.second_most_likely_key[1]) if task.second_most_likely_key else None,
             )
         )
@@ -132,11 +133,10 @@ class FindKeyTaskResultHandler:
         self._pending_tasks_dao.delete(task.task_id)
 
 
-def dump_database(tune_keys_dao:TuneKeysDao, target_file: pathlib.Path):
+def dump_database(tune_keys_dao: TuneKeysDao, target_file: pathlib.Path):
     with open(target_file, "w") as f:
         all_data = list(tune_keys_dao.iterate_all())
         json.dump(all_data, f, cls=CustomJSONEncoder)
-
 
 
 def main():
