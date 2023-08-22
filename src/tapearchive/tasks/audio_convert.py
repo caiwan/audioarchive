@@ -1,5 +1,6 @@
 from contextlib import ExitStack
-from typing import Optional
+import time
+from typing import List, Optional
 from dataclasses import dataclass
 import pathlib
 import threading
@@ -34,10 +35,32 @@ class ConvertAudioResult(TaskResult):
     target_file_id: Optional[str] = None
 
 
+@dataclass
+class SliceAudio(Task):
+    source_file_id: str
+    file_format: str = "mp3"
+    segment_length: int = 15
+
+
+@dataclass
+class SliceAudioResult(TaskResult):
+    target_file_ids: Optional[List[str]] = None
+
+
+@dataclass
+class AppendAlbumArt(Task):
+    source_file_id: str
+    album_art_file_id: str
+
+
+@dataclass
+class AppendAlbumArtResult(TaskResult):
+    target_file_id: Optional[str] = None
+
+
 class AudioConverterHandler:
     def __init__(self, db_pool, **kwargs) -> None:
         self._lock = threading.Lock()
-        self._tasks_finished = []
 
         self._running_processes = []
 
@@ -81,18 +104,22 @@ class AudioConverterHandler:
 
         bitrate_option = f" -b:a {task.bitrate_kbps}k" if task.bitrate_kbps else ""
 
-        tmp_files_context = ExitStack()
-        tmp_source = tmp_files_context.enter_context(
-            self._file_dao.as_tempfile(
-                task.source_file_id, suffix=f".{task.source_format}"
-            )
-        )
-        tmp_target = tmp_files_context.enter_context(
-            tempfile.NamedTemporaryFile("wb", suffix=f".{task.target_format}")
+        context = ExitStack()
+
+        target_file = pathlib.Path(
+            context.enter_context(
+                tempfile.NamedTemporaryFile("wb", suffix=f".{task.target_format}")
+            ).name
         )
 
-        target_file = pathlib.Path(tmp_target.name)
-        source_file = pathlib.Path(tmp_source.name)
+        source_file = pathlib.Path(
+            context.enter_context(
+                self._file_dao.as_tempfile(
+                    task.source_file_id, suffix=f".{task.source_format}"
+                )
+            ).name
+        )
+
         ffmpeg_commnad = f"ffmpeg -y -i {source_file.absolute()} -filter_complex {';'.join(filter_stack)} -map [out]{bitrate_option} {target_file.absolute()}".split()
 
         LOGGER.debug(f"FFMPEG command: {' '.join(ffmpeg_commnad)}")
@@ -102,67 +129,41 @@ class AudioConverterHandler:
         )
         self._running_processes.append(ffmpeg_process)
 
-        # TODO: Configure sync/async execution
-        # Asyncronous execution, create job on top to poll the result then resolve it
         ffmpeg_job = manager.create_child_job(
             job,
             bind_function(AudioConverterHandler._poll_ffmpeg, self),
             ffmpeg_process,
-            task,
-            target_file,
-            tmp_files_context,
-            dispatcher=dispatcher,
         )
         manager.schedule_job(ffmpeg_job)
         manager.wait(ffmpeg_job)
 
-    def _poll_ffmpeg(
-        self,
-        ffmpeg_process: subprocess.Popen,
-        task: ConvertAudio,
-        target_file_name: pathlib.Path,
-        tmp_file_context: ExitStack,
-        dispatcher: TaskDispatcher = None,
-        job: Job = None,
-        manager: JobManager = None,
-    ):
-        returncode = poll_subprocess(ffmpeg_process)
+        LOGGER.debug(
+            f"FFMPEG {ffmpeg_process.pid} finished, return code: {ffmpeg_job.result}"
+        )
 
-        if returncode is None:
-            manager.create_job(
-                bind_function(AudioConverterHandler._poll_ffmpeg, self),
-                ffmpeg_process,
-                task,
-                target_file_name,
-                tmp_file_context,
-                dispatcher=dispatcher,
+        if ffmpeg_job.result == 0:
+            target_temp_file = context.enter_context(open(target_file, "rb"))
+            db_file = context.enter_context(
+                self._file_dao.open(f"{uuid4()}.{task.target_format}", "wb")
             )
-            manager.schedule_job(job)
-            return
-        else:
-            if returncode == 0:
-                temp_file = tmp_file_context.enter_context(open(target_file_name, "rb"))
-                db_file = tmp_file_context.enter_context(
-                    self._file_dao.open(f"{uuid4()}.{task.target_format}", "wb")
-                )
-                db_file.write(temp_file.read())
+            db_file.write(target_temp_file.read())
 
-                dispatcher.post_task(
+            dispatcher.post_task(
                 ConvertAudioResult(
                     task=task,
                     target_file_id=str(db_file._id),
-                    )
                 )
+            )
 
-            else:
-                dispatcher.post_task(
-                    ConvertAudioResult(
-                        task=task,
-                    ).failed(f"FFMPEG failed with return code {returncode}")
-                )
+        else:
+            dispatcher.post_task(
+                ConvertAudioResult(
+                    task=task,
+                ).failed(f"FFMPEG failed with return code {ffmpeg_job.result}")
+            )
 
-            self._running_processes.remove(ffmpeg_process)
-            tmp_file_context.close()
+        self._running_processes.remove(ffmpeg_process)
+        context.close()
 
     @task_handler(ConvertAudioResult)
     def convert_audio_result(
@@ -175,7 +176,140 @@ class AudioConverterHandler:
             if task_result.is_failed:
                 LOGGER.error(f"Audio conversion failed: {task_result.failure_reason}")
             else:
-                self._tasks_finished.append(task_result)
                 LOGGER.debug(
                     f"Audio conversion finished, {len(self._running_processes)} processes running"
                 )
+
+    @task_handler(SliceAudio)
+    def slice_audio(
+        self,
+        task: SliceAudio,
+        dispatcher: TaskDispatcher = None,
+        job: Job = None,
+        manager: JobManager = None,
+    ):
+        if len(self._running_processes) > self._max_processes:
+            # Put back the taske at the end of the queue
+            dispatcher.post_task(task)
+            return
+
+        context = ExitStack()
+
+        tmp_source = pathlib.Path(
+            context.enter_context(self._file_dao.as_tempfile(task.source_file_id)).name
+        )
+        tmp_target = pathlib.Path(context.enter_context(tempfile.TemporaryDirectory()))
+
+        ffmpeg_command = f"ffmpeg -y -i {tmp_source} -f segment -segment_time {task.segment_length} -c copy {tmp_target}/output_%03d.{task.file_format}".split()
+
+        LOGGER.debug(f"FFMPEG command: {' '.join(ffmpeg_command)}")
+
+        ffmpeg_process = subprocess.Popen(
+            ffmpeg_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+
+        self._running_processes.append(ffmpeg_process)
+
+        ffmpeg_job = manager.create_child_job(
+            job,
+            bind_function(AudioConverterHandler._poll_ffmpeg, self),
+            ffmpeg_process,
+        )
+        manager.schedule_job(ffmpeg_job)
+        manager.wait(ffmpeg_job)
+
+        LOGGER.debug(
+            f"FFMPEG {ffmpeg_process.pid} finished, return code: {ffmpeg_job.result}"
+        )
+
+        if ffmpeg_job.result == 0:
+            target_files = []
+            for file_path in tmp_target.iterdir():
+                file_copy_context = ExitStack()
+
+                file = file_copy_context.enter_context(open(file_path, "rb"))
+
+                db_file = file_copy_context.enter_context(
+                    self._file_dao.open(f"{uuid4()}.mp3", "wb")
+                )
+                db_file.write(file.read())
+                target_files.append(str(db_file._id))
+
+                file_copy_context.close()
+
+            LOGGER.debug(f"Created {len(target_files)} files")
+
+            dispatcher.post_task(
+                SliceAudioResult(
+                    task=task,
+                    target_file_ids=target_files,
+                )
+            )
+        else:
+            dispatcher.post_task(
+                ConvertAudioResult(
+                    task=task,
+                ).failed(f"FFMPEG failed with return code {ffmpeg_job.result}")
+            )
+
+        self._running_processes.remove(ffmpeg_process)
+
+        context.close()
+
+    @task_handler(SliceAudioResult)
+    def slice_audio_result(
+        self,
+        task_result: SliceAudioResult,
+        *args,
+        **kwargs,
+    ):
+        with self._lock:
+            if task_result.is_failed:
+                LOGGER.error(f"Audio slicing failed: {task_result.failure_reason}")
+            else:
+                LOGGER.debug(
+                    f"Audio slicing finished, {len(self._running_processes)} processes running"
+                )
+
+    @task_handler(AppendAlbumArt)
+    def append_album_art(
+        self,
+        task: AppendAlbumArt,
+        dispatcher: TaskDispatcher = None,
+        job: Job = None,
+        manager: JobManager = None,
+    ):
+        if len(self._running_processes) > self._max_processes:
+            # Put back the taske at the end of the queue
+            dispatcher.post_task(task)
+            return
+        
+        context = ExitStack()
+
+        # ... 
+        # ffmpeg -i input.mp3 -i album_art.jpg -c:a copy -c:v copy -map 0 -map 1 -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (Front)" output.mp3
+
+        context.close()
+
+    @task_handler(AppendAlbumArtResult)
+    def append_album_art_result(
+        self,
+        task_result: AppendAlbumArtResult,
+        *args,
+        **kwargs,
+    ):
+        with self._lock:
+            if task_result.is_failed:
+                LOGGER.error(f"Audio slicing failed: {task_result.failure_reason}")
+            else:
+                LOGGER.debug(
+                    f"Audio slicing finished, {len(self._running_processes)} processes running"
+                )
+
+    def _poll_ffmpeg(self, ffmpeg_process: subprocess.Popen, *args, **kwargs):
+        returncode = None
+
+        while returncode is None:
+            returncode = poll_subprocess(ffmpeg_process, timeout=1, logger=LOGGER)
+            LOGGER.debug(f"FFMPEG {ffmpeg_process.pid} return code: {returncode}")
+        return returncode

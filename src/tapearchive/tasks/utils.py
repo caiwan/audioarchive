@@ -15,7 +15,7 @@ def poll_subprocess(
     logger = logger or LOGGER
 
     try:
-        stdout_data, stderr_data = subprocess.communicate(timeout=30)
+        stdout_data, stderr_data = subprocess.communicate(timeout=timeout)
 
     except subprocess.TimeoutExpired:
         subprocess.terminate()
