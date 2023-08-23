@@ -17,8 +17,8 @@
 
       <div class="navbar-collapse" id="navbarSupportedContent" :class="{'collapse': !showSidebar}">
         <ul class="navbar-nav me-auto mb-2 mb-lg-0" v-if="!isInitializing">
-          <li class="nav-item">
-            <a class="nav-link active" href="#">Home</a>
+          <li class="nav-item" v-for="item in menu" :key="item.id">
+            <router-link class="nav-link" href="#" :class="{ 'active': $route.path == item.path }" :to="item.path">{{ item.name }}</router-link>
             <!-- <a class="nav-link active" href="#" @click="testScnackbar()">Test snackbar</a> -->
           </li>
 
@@ -62,6 +62,14 @@ export default {
     // ...mapGetters('User', ['isLoggedIn']),
     ...mapState('App', ['isInitializing'])
   },
+  data: () => ({
+    menu: [
+      { id: 1, name: 'Dashboard', path: '/' },
+      { id: 2, name: 'Catalog', path: '/catalog' },
+      { id: 2, name: 'Workers', path: '/workers' },
+      { id: 4, name: 'Settings', path: '/settings' },
+    ],
+  }),
   methods: {
     // ...mapActions('User', ['fetchProfile']),
     ...mapMutations('App', ['initialized']),
