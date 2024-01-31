@@ -5,17 +5,29 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 
 # TODO: Pin all version
 
-RUN set -eux \
-    && apt update >/dev/null 2>&1 \
-    && apt install -y software-properties-common >/dev/null 2>&1 \
-    && add-apt-repository ppa:deadsnakes/ppa >/dev/null 2>&1 \
-    && apt update >/dev/null 2>&1 \
-    && apt install -y \
+# Install required tools and add deadsnakes repository for Python 3.8
+RUN apt update && \
+    apt install -y software-properties-common && \
+    apt install -y \
+        gnupg2 \
+        build-essential \
+        zlib1g-dev \
+        libncurses5-dev \
+        libgdbm-dev \
+        libnss3-dev \
+        libssl-dev \
+        libreadline-dev \
+        libffi-dev \
+        libsqlite3-dev \
+        wget \
+        libbz2-dev \
         python3.8 \
         python3-pip \
         libsndfile1 \
-        ffmpeg \
-    && python3 -m pip install -U pip==22.3 pip-tools==6.8.0
+        ffmpeg 
+
+# Set Python 3.8 as the default Python version
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1
 
 ENTRYPOINT ["bash", "-c"]
 
@@ -30,9 +42,13 @@ RUN set -eux \
         python3.8-dev \
         python3.8-venv \
         libsndfile1-dev \
-    && python3 -m pip install autoflake8==0.4.0 black==22.10.0 \
-    && ln -s /usr/bin/pip /usr/bin/pip3.8 \
-    && pip-compile --output-file /tmp/requirements.txt /tmp/app/setup.cfg \
+    && python3 -m pip install \
+        autoflake8==0.4.0 \
+        black==22.10.0 \
+        pip-tools==7.3.0 \ 
+    && ln -s /usr/bin/pip /usr/bin/pip3.8
+
+RUN pip-compile --output-file /tmp/requirements.txt /tmp/app/setup.cfg \
     && pip-compile --extra test --output-file /tmp/test-requirements.txt /tmp/app/setup.cfg \
 	&& python3 -m pip install -r /tmp/requirements.txt \
     && python3 -m pip install -r /tmp/test-requirements.txt \
@@ -45,6 +61,14 @@ RUN set -eux \
 # ---
 FROM python-builder AS dev
 
+RUN apt update && \
+    apt install -y \
+        zsh \
+        neovim
+
+# RUN curl -o /tmp/btop.tbz https://github.com/aristocratos/btop/releases/latest/download/btop-x86_64-linux-musl.tbz \
+#     && tar xf /tmp/btop.tbz --strip-components=2 -C /usr/local ./btop/bin/btop
+
 RUN set -eux \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
@@ -52,6 +76,17 @@ RUN set -eux \
     && apt update \
     && apt install -y yarn \
     && yarn global add @vue/cli
+
+ENV CHSH='no'
+ENV RUNZSH='no'
+RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+RUN chsh -s $(which zsh)
+
+RUN apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/*
+
+CMD ["sleep", "infinity"]
 
 # ---- 
 
@@ -73,7 +108,10 @@ COPY ./entrypoint.sh /entrypoint.sh
 # Final cleanup 
 # TODO: some parts of the bulidng evnironment is required after (gcc and such)
 # RUN apk del .build-deps 
-RUN rm -rf /tmp/* /var/cache/apk/*
+RUN apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/*
+
 CMD ["'/entrypoint.sh'"]
 
 # TODO: Add frontend

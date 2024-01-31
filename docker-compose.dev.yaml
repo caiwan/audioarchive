@@ -1,6 +1,21 @@
 version: "3.2"
 services:
 
+  app:
+    image: "caiwan/tapearchive:latest-dev"
+    restart: always
+    networks:
+      - redis
+      - mongo
+    ports:
+      - 8080:8080
+      - 5000:5000
+
+    command: ["sleep infinity"]
+
+    volumes: 
+      - ./:/app/tapearchive
+
   redis:
     image: "redis:6.0-alpine"
     command: redis-server

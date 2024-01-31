@@ -1,0 +1,3 @@
+[submodule "pytqlib"]
+	path = pytqlib
+	url = git@github.com:caiwan/pytqlib.git
