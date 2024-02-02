@@ -5,8 +5,10 @@ from typing import Iterator, Optional, List, Dict, Tuple
 from dataclasses import dataclass, field
 from uuid import UUID
 import bson
-from dataclasses_json import config
-import marshmallow
+from dataclasses_json import config, DataClassJsonMixin
+from marshmallow import fields
+
+from marshmallow_dataclass import class_schema
 
 
 from tq.database.db import transactional, BaseEntity
@@ -35,16 +37,11 @@ class Attachment(BaseEntity):
         metadata=config(
             encoder=lambda x: x.value,
             decoder=lambda x: AttachmentType(x),
-            mm_field=marshmallow.fields.Enum(AttachmentType),
+            mm_field=fields.Enum(AttachmentType),
         )
     )
-    path: pathlib.Path = field(
-        metadata=config(
-            encoder=lambda x: str(x),
-            decoder=lambda x: pathlib.Path(x),
-            mm_field=marshmallow.fields.String(),
-        )
-    )
+
+    path: str = ""
     meta: Optional[Dict[str, str]] = field(default_factory=defaultdict(str))
 
 
@@ -65,7 +62,7 @@ class RecordingEntry(BaseEntity):
         metadata=config(
             encoder=lambda x: x.value,
             decoder=lambda x: ChannelMode(x),
-            mm_field=marshmallow.fields.Enum(ChannelMode),
+            mm_field=fields.Enum(ChannelMode),
         )
     )
     description: Optional[str] = None

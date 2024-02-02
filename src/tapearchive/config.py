@@ -23,7 +23,7 @@ class RedisDBConfig(DataClassJsonMixin):
 
 @dataclass
 class MongoDBConfig(DataClassJsonMixin):
-    url: str = "mongodb://localhost:27017"
+    url: str = "mongodb://root:toor@localhost:27017?authSource=admin"
 
 
 @dataclass
