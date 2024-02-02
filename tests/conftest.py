@@ -10,8 +10,8 @@ LOGGER = logging.getLogger(__name__)
 
 # TODO: Use fakeredis (to an extent)
 
-DB_PORT = 6379
-DB_HOST = "localhost"
+REDIS_PORT = 6379
+REDIS_HOST = "redis"
 
 
 def pytest_addoption(parser):
@@ -42,8 +42,8 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture(scope="session")
 def redis_db_config() -> RedisDBConfig:
     return RedisDBConfig(
-        host=DB_HOST,
-        port=DB_PORT,
+        host=REDIS_HOST,
+        port=REDIS_PORT,
         db=0,
         password=None,
     )
@@ -51,7 +51,7 @@ def redis_db_config() -> RedisDBConfig:
 
 @pytest.fixture(scope="session")
 def redis_db_pool() -> redis.ConnectionPool:
-    return redis.ConnectionPool(host=DB_HOST, port=DB_PORT, db=0)
+    return redis.ConnectionPool(host=REDIS_HOST, port=REDIS_PORT, db=0)
 
 
 @pytest.fixture(scope="session")

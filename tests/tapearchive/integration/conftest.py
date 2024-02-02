@@ -16,9 +16,9 @@ from tapearchive.app import register_task_dispatchers
 import pytest
 
 REDIS_PORT = 6379
-REDIS_HOST = "localhost"
+REDIS_HOST = "redis"
 
-MONGO_HOST = "localhost:27017"
+MONGO_HOST = "mongo:27017"
 MONGO_CONNECTION_STRING = "mongodb://root:toor@" + MONGO_HOST
 PLACEHOLDER = "_placeholder"
 

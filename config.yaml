@@ -1,12 +1,14 @@
-# Configuration fro local development
----
-db:
-  host: redis
-  port: 6379
+data_directory: /data
+is_gui_enabled: true
+is_manager: true
+is_worker: true
+max_threads: 0
+mongo:
+  url: mongodb://localhost:27017
+redis:
   db: 0
-  username: null
+  host: localhost
   password: null
-is_manager: True
-is_gui_enabled: True
-is_worker: True
-task_queue_uuid: 00000000-0000-0000-0000-000000000000
+  port: 6379
+  username: null
+task_queue_uuid: 774659a1-4236-45b1-8547-163676726b79

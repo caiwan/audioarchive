@@ -13,9 +13,9 @@ import logging.config
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from tapearchive.config import AppConfig
+from tapearchive.config import AppConfig, get_config
 from tapearchive.models.catalog import CatalogDao, CatalogEntry
-from tapearchive.utils import find_all_files, get_config
+from tapearchive.utils import find_all_files
 
 from tapearchive.app import create_app, create_db_connection, create_dispatcher
 
